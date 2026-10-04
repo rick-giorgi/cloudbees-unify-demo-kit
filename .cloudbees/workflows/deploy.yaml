@@ -62,6 +62,7 @@ jobs:
           fi
           echo "Deploy status: SUCCESS (simulated)"
       - name: Publish evidence
+        if: ${{ success() }}
         uses: https://github.com/cloudbees-io/publish-evidence-item@v1
         with:
           content: |-
@@ -70,3 +71,18 @@ jobs:
             - Artifact: ${{ inputs.artifact-id }}
             - Environment: ${{ inputs.environment }}
             - Status: **success** (simulated)
+      # The job stays FAILED (so DORA still counts it); this step only records why - for audit purposes.
+      - name: Publish failure evidence
+        if: ${{ failure() }}
+        uses: https://github.com/cloudbees-io/publish-evidence-item@v1
+        with:
+          content: |-
+            ## Component deployment FAILED (simulated)
+            - Component: orders-api
+            - Artifact: ${{ inputs.artifact-id }}
+            - Environment: ${{ inputs.environment }}
+            - Status: **failed** - rolled a bad number, failed randomly as expected 🎲
+            - Configured pass rate: staging 50%, prod 80%
+            - Simulated cause: readiness probe timeout
+            - Release halted: no promotion beyond this environment
+ 
