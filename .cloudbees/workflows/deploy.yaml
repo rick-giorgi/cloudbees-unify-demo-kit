@@ -24,16 +24,16 @@ on:
       environment:
         type: choice
         options:
-          - dev
-          - qa
           - staging
           - prod
-        default: dev
+        default: staging
 
 jobs:
   deploy:
+    environment: ${{ inputs.environment }}
     steps:
       - name: Simulate deployment
+        kind: deploy
         uses: docker://alpine:3.20
         shell: sh
         run: |
