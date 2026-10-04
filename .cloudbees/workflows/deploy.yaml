@@ -37,14 +37,28 @@ jobs:
         uses: docker://alpine:3.20
         shell: sh
         run: |
+          ENV="${{ inputs.environment }}"
+          case "$ENV" in
+            staging) PASS_RATE=50 ;;
+            prod)    PASS_RATE=80 ;;
+            *)       PASS_RATE=100 ;;
+          esac
+          ROLL=$(( $(od -An -N2 -tu2 /dev/urandom | tr -d ' ') % 100 ))
+ 
           echo "== Simulated component deployment =="
           echo "Component:    orders-api"
           echo "Artifact:     ${{ inputs.artifact-id }}"
-          echo "Environment:  ${{ inputs.environment }}"
-          if [ "${{ inputs.environment }}" = "prod" ]; then
+          echo "Environment:  $ENV"
+          if [ "$ENV" = "prod" ]; then
             echo "Production policy: approval and change ticket required (talking point)"
           else
             echo "Non-production policy: standard checks passed"
+          fi
+          echo "Simulation:   pass rate ${PASS_RATE}%, roll ${ROLL}"
+ 
+          if [ "$ROLL" -ge "$PASS_RATE" ]; then
+            echo "Deploy status: FAILED (simulated - readiness probe timeout)"
+            exit 1
           fi
           echo "Deploy status: SUCCESS (simulated)"
       - name: Publish evidence
