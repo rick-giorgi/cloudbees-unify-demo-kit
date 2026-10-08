@@ -6,6 +6,10 @@ name: component-deploy
 # - Called by the application's deployer (workflow_call), or run standalone (workflow_dispatch).
 # - Mock/echo only: it SIMULATES a deploy and publishes evidence. It does not
 #   deploy to a real cluster.
+# - Job-level environment + "kind: deploy" step so DORA metrics populate.
+# - DEMO MODE: no random failures - every deployment succeeds.
+#   (Random version kept separately as deploy-random.yaml.)
+# - Evidence is published on success AND on failure (failure step only fires on a real error).
 
 on:
   workflow_call:
@@ -30,21 +34,18 @@ on:
 
 jobs:
   deploy:
+    # DORA metrics need the target environment declared at job level.
+    # The environment must already exist in Unify (staging / prod).
     environment: ${{ inputs.environment }}
     steps:
       - name: Simulate deployment
+        # Marks this step as a deployment for DORA / deployment analytics
         kind: deploy
         uses: docker://alpine:3.20
         shell: sh
         run: |
           ENV="${{ inputs.environment }}"
-          case "$ENV" in
-            staging) PASS_RATE=50 ;;
-            prod)    PASS_RATE=80 ;;
-            *)       PASS_RATE=100 ;;
-          esac
-          ROLL=$(( $(od -An -N2 -tu2 /dev/urandom | tr -d ' ') % 100 ))
- 
+
           echo "== Simulated component deployment =="
           echo "Component:    orders-api"
           echo "Artifact:     ${{ inputs.artifact-id }}"
@@ -53,12 +54,6 @@ jobs:
             echo "Production policy: approval and change ticket required (talking point)"
           else
             echo "Non-production policy: standard checks passed"
-          fi
-          echo "Simulation:   pass rate ${PASS_RATE}%, roll ${ROLL}"
- 
-          if [ "$ROLL" -ge "$PASS_RATE" ]; then
-            echo "Deploy status: FAILED (simulated - readiness probe timeout)"
-            exit 1
           fi
           echo "Deploy status: SUCCESS (simulated)"
       - name: Publish evidence
@@ -71,7 +66,8 @@ jobs:
             - Artifact: ${{ inputs.artifact-id }}
             - Environment: ${{ inputs.environment }}
             - Status: **success** (simulated)
-      # The job stays FAILED (so DORA still counts it); this step only records why - for audit purposes.
+      # NEW: failed deployments leave an audit trail too.
+      # The job stays FAILED (so DORA still counts it); this step only records why.
       - name: Publish failure evidence
         if: ${{ failure() }}
         uses: https://github.com/cloudbees-io/publish-evidence-item@v1
@@ -81,8 +77,6 @@ jobs:
             - Component: orders-api
             - Artifact: ${{ inputs.artifact-id }}
             - Environment: ${{ inputs.environment }}
-            - Status: **failed** - rolled a bad number, failed randomly as expected 🎲
-            - Configured pass rate: staging 50%, prod 80%
-            - Simulated cause: readiness probe timeout
+            - Status: **failed**
             - Release halted: no promotion beyond this environment
  
